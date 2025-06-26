@@ -3,6 +3,7 @@ FROM ghcr.io/hcdp/task-preliminary-acquisition-base:latest
 # Add the mesonet code
 ADD /code/hi_mesonet /workspace/code/hi_mesonet
 
+RUN mkdir -p /workspace/envs
 ADD /envs/hi_mesonet/prod.env /workspace/envs
 
 # Create the data output folder
