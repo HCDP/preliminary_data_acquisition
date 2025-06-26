@@ -9,6 +9,7 @@ else
     echo "No Acquisition date was provided by the environment. Defaulting to yesterday."
 fi
 echo "Acquisition date is: " $CUSTOM_DATE
+source /workspace/envs/prod.env
 
 echo "[task.sh] [2/4] Collecting Climate data from HI Mesonet database on the daily timeframe."
 cd /home/hawaii_climate_products_container/preliminary/data_aqs/code/hi_mesonet

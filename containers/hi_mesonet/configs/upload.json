@@ -13,7 +13,7 @@
     },
     "upload": [
         {
-            "local_path": "/home/hawaii_climate_products_container/preliminary/data_aqs/data_outputs/mesonetSynoptic",
+            "local_path": "/workspace/data_outputs/mesonetSynoptic",
             "remote_path": "HCDP/workflow_data/preliminary/data_aqs/data_outputs/mesonetSynoptic",
             "system_id": "ikewai-annotated-data"
         }

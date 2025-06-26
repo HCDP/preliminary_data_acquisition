@@ -3,8 +3,7 @@ import sys
 import pytz
 import requests
 import pandas as pd
-import numpy as np
-from datetime import datetime,timedelta
+from datetime import datetime
 from util import handle_retry
 from io import StringIO
 
