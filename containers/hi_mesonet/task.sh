@@ -12,7 +12,7 @@ echo "Acquisition date is: " $CUSTOM_DATE
 source /workspace/envs/prod.env
 
 echo "[task.sh] [2/4] Collecting Climate data from HI Mesonet database on the daily timeframe."
-cd /home/hawaii_climate_products_container/preliminary/data_aqs/code/hi_mesonet
+cd /workspace/code/hi_mesonet
 echo "---mesonet_aggregator.py---"
 python3 mesonet_aggregator.py $CUSTOM_DATE
 
