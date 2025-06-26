@@ -17,4 +17,5 @@ ADD /containers/hi_mesonet/configs/upload.json /sync/config.json
 # Copy the task definition script.
 ADD /containers/hi_mesonet/task.sh /workspace/task.sh
 
-CMD [ "/bin/bash", "/actor/task.sh" ]
+WORKDIR /workspace
+CMD [ "/bin/bash", "task.sh" ]
