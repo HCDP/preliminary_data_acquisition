@@ -13,8 +13,8 @@
     },
     "upload": [
         {
-            "local_path": "/workspace/data_outputs/mesonetSynoptic",
-            "remote_path": "HCDP/workflow_data/preliminary/data_aqs/data_outputs/mesonetSynoptic",
+            "local_path": "/workspace/data_outputs/hi_mesonet",
+            "remote_path": "HCDP/workflow_data/preliminary/data_aqs/data_outputs/hi_mesonet",
             "system_id": "ikewai-annotated-data"
         }
     ]

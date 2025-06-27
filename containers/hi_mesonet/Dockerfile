@@ -8,9 +8,6 @@ ADD /envs/hi_mesonet/prod.env /workspace/envs
 
 # Create the data output folder
 RUN mkdir -p /workspace/data_outputs/hi_mesonet/parse
-RUN mkdir -p /workspace/data_outputs/hi_mesonet/raw
-RUN mkdir -p /workspace/data_outputs/mesonetSynoptic/parse
-RUN mkdir -p /workspace/data_outputs/mesonetSynoptic/raw
 
 # Copy the upload configuration.
 ADD /containers/hi_mesonet/configs/upload.json /sync/config.json

@@ -1,4 +1,5 @@
 import os
+from os.path import join
 import sys
 import pytz
 import requests
@@ -13,7 +14,7 @@ project_root = os.environ.get("PROJECT_ROOT")
 meso_id_src = os.environ.get("MESO_TABLE")
 url = f"https://api.hcdp.ikewai.org/mesonet/db/measurements"
 meso_var_list = ["SWin_1_Avg","SWout_1_Avg","LWin_1_Avg","LWinUC_1_Avg","LWout_1_Avg","LWoutUC_1_Avg","SWnet_1_Avg","LWnet_1_Avg","Rin_1_Avg","Rout_1_Avg","Rnet_1_Avg","RnetUC_1_Avg","Tair_1_Avg","Tair_2_Avg","RH_1_Avg","RH_2_Avg","WS_1_Avg","WDuv_1_Avg","RF_1_Tot300s","RF_2_Tot300s","RFint_1_Max","RFmin_1","RFmin_2"]
-output_dir = project_root + "data_outputs/"+src_name+"/parse/"
+output_dir = join(project_root, "data_outputs", src_name, "parse")
 
 def fetch_raw_mesonet(targ_date):
     """
@@ -36,7 +37,8 @@ def fetch_raw_mesonet(targ_date):
 
 def format_meso_output(targ_date):
     date_code = targ_date.strftime("%Y%m%d")
-    outfile = output_dir + '/' + '_'.join((date_code,src_name,'parsed'))+'.csv'
+    outfname = f"{date_code}_{src_name}_parsed.csv"
+    outfile = join(output_dir, outfname)
     req = handle_retry(fetch_raw_mesonet,[targ_date])
     if req.status_code != 200:
         print("Issues encountered in downloading",targ_date)
@@ -55,7 +57,7 @@ def format_meso_output(targ_date):
         skn_merged.index = skn_merged.index.tz_localize(None)
         skn_merged = skn_merged.reset_index()
         skn_merged.to_csv(outfile,index=False)
-        print("Wrote data to",outfile)
+        print("Wrote data to", outfile)
 
 if __name__=="__main__":
     if len(sys.argv) > 1:
