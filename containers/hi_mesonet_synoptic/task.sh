@@ -1,4 +1,3 @@
-#force
 #!/bin/bash
 echo "[task.sh] [1/4] Starting Execution."
 export TZ="HST"
