@@ -11,7 +11,7 @@ fi
 echo "Acquisition date is: " $CUSTOM_DATE
 
 echo "[task.sh] [2/4] Collecting Climate data from Synoptic on the daily timeframe."
-cd /home/hawaii_climate_products_container/preliminary/data_aqs/code/hi_mesonet
+cd /home/hawaii_climate_products_container/preliminary/data_aqs/code/hi_mesonet_synoptic
 echo "---hiMeso_synoptic_24hr_data_aqs.R---"
 Rscript hiMeso_synoptic_24hr_data_aqs.R $CUSTOM_DATE
 
