@@ -2,6 +2,27 @@
 
 rm(list = ls())#remove all objects in R
 
+fetch_data_retry <- function(url, retries = 5, backoff = 0) {
+  page <- tryCatch(
+    {
+      readLines(url)
+    },
+    error = function(err) {
+      if(retries < 1) {
+        stop(err)
+      }
+      retries = retries - 1
+      print(sprintf("Attempt failed. Retries remaining: %d...", retries))
+      Sys.sleep(backoff)
+      page <- fetch_data_retry(url, retries, 2 * (5 - retries))
+      return(page)
+    }
+  )
+
+  return(page)
+}
+
+
 #make dirs
 mainDir <- "/home/hawaii_climate_products_container/preliminary"
 codeDir<-paste0(mainDir,"/data_aqs/code/source")
@@ -22,7 +43,7 @@ parse_wd<-paste0(mainDir,"/data_aqs/data_outputs/hads/parse")
 
 #get data from HADS url
 url<-"https://hads.ncep.noaa.gov/nexhads2/servlet/DecodedData?sinceday=2&hsa=nil&state=HI&nesdis_ids=nil&of=1" #this is the URL for all data in website in the last 2 (sinceday)s
-page<-readLines(url)
+page<-fetch_data_retry(url)
 
 #save raw data
 setwd(raw_page_wd)#sever path for un-parsed hads files
