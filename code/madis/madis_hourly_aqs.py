@@ -211,7 +211,7 @@ def madis_fetch_hour(hour):
     utc_filename = utc_hour.strftime('%Y%m%d_%H%M')+'.gz'
 
     #Open ftp connection
-    with ftplib.FTP(ftplink,ftp_user,ftp_pass) as ftp:
+    with ftplib.FTP(ftplink, ftp_user, ftp_pass, timeout = 60) as ftp:
         for src in list(SRC_VAR_HASH.keys()):
             ftp_dir = "/LDAD/"+src+"/netCDF/"
             ftp.cwd(ftp_dir)

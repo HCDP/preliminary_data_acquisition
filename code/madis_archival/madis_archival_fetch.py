@@ -163,7 +163,7 @@ unique_dates = pd.Series(utc_times).map(lambda t: t.date()).unique()
 unique_days = ["{:02d}".format(dt.day) for dt in unique_dates]
 output_csv = OUTPUT_DIR + '_'.join((day_st.strftime('%Y%m%d'),'madis','parsed')) + '.csv'
 #Open the ftp connection but don't change directories until days are set
-with ftplib.FTP(ftplink,ftp_user,ftp_pass) as ftp:
+with ftplib.FTP(ftplink, ftp_user, ftp_pass, timeout = 60) as ftp:
     for (src,udate) in product(SRC_LIST,unique_dates):
         unique_year = udate.strftime('%Y')
         unique_mon = udate.strftime('%m')

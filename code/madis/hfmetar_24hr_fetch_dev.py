@@ -137,7 +137,7 @@ prev_day_mon = prev_day_str.split('-')[1]
 prev_day_day = prev_day_str.split('-')[2]
 csv_name = PARSED_DIR + '_'.join((prev_day.strftime('%Y%m%d'),'madis','parsed')) + '.csv'
 #Open FTP connection
-with ftplib.FTP(ftplink,ftp_user,ftp_pass) as ftp:
+with ftplib.FTP(ftplink, ftp_user, ftp_pass, timeout = 60) as ftp:
     ftp.cwd(ftp_dir)
     ftp_files = ftp.nlst()
     avail_files = [fname for fname in prev_day_files if fname in ftp_files]
