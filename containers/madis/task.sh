@@ -13,10 +13,10 @@ else
 fi
 echo "Acquisition date is: $CUSTOM_DATE"
 
-python3 -u test-fail.py
 
 echo "[task.sh] [2/4] Collecting Climate data from MADIS on the daily timeframe."
 cd /home/hawaii_climate_products_container/preliminary/data_aqs/code/madis
+python3 -u test-fail.py
 python3 -u mesonet_24hr_fetch_dev.py $CUSTOM_DATE
 python3 -u hfmetar_24hr_fetch_dev.py $CUSTOM_DATE
 
