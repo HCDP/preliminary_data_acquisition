@@ -1,23 +1,28 @@
+"""
+Fetch MADIS archival data
+Patch 05.2026
+Converting ftp process to http via requests
+"""
 import sys
 import os
 import warnings
-import subprocess
-import ftplib
+import requests
+import gzip
+import io
 import pandas as pd
 import xarray as xr
 import numpy as np
 from os.path import exists
-from datetime import datetime, timedelta
+from datetime import timedelta
 from xarray import SerializationWarning
 from itertools import product
-
-# Madis processor for dates more than 122 hours ago
+from util import handle_retry
 
 warnings.filterwarnings('ignore',category=SerializationWarning)
 #DEFINE CONSTANTS-------------------------------------------------------------
 ##[OUTPUT_DIR] defines target directory for parsed data csv. 
-#OUTPUT_DIR = '/mnt/lustre/koa/koastore/hawaii_climate_risk_group/kodamak8/close_gap/scratch/'
-OUTPUT_DIR = '/home/hawaii_climate_products_container/preliminary/data_aqs/data_outputs/madis/parse/'
+OUTPUT_DIR = '/home/hawaii_climate_products_container/preliminary/data_aqs/data_outputs/madis/parse'
+#OUTPUT_DIR = './'
 SRC_LIST = ['mesonet','hfmetar']
 DF_COLS = ['stationId','stationName','dataProvider','time','varname','value','units','source']
 META_VAR_KEYS = ['stationId','stationName','dataProvider','observationTime']
@@ -110,7 +115,7 @@ def process_madis_data(ds,src):
     convert_K2C(converted_dict,ds,K_CONVERSION_KEYS,src,hii)
     convert_str(converted_dict,ds,STR_CONVERSION_KEYS,hii)
     convert_time(converted_dict,ds,hii)
-    df = pd.DataFrame()
+    df_list = []
     avail_var_keys = [vk for vk in data_var_keys if vk in list(ds.keys())]
     for vk in avail_var_keys:
         meta_group = [[converted_dict[key][index] for key in META_VAR_KEYS] for index in range(len(hii))]
@@ -120,8 +125,8 @@ def process_madis_data(ds,src):
         var_group = [[varname[index],converted_dict[vk][index],units[index],src_col[index]] for index in range(len(hii))]
         full_group = [meta_group[index]+var_group[index] for index in range(len(hii))]
         var_df = pd.DataFrame(full_group,columns=DF_COLS)
-        df = pd.concat([df,var_df])
-    
+        df_list.append(var_df)
+    df = pd.concat(df_list,axis=0)
     #Clear all no-data values
     df = df[~df['value'].isna()]
     return df
@@ -138,56 +143,63 @@ def update_csv(csvname,new_df):
         new_df = new_df.fillna('NA')
         new_df.to_csv(csvname,index=False)
 
+def fetch_url(url):
+    response = requests.get(url, stream=True)
+    if response.status_code == 404:
+        return None          # file absent — caller skips, no retry
+    response.raise_for_status()  # raises on 5xx, triggering handle_retry
+    return response
+
 #END FUNCTIONS----------------------------------------------------------------
+if __name__== "__main__":
+    st_date = sys.argv[1] #%Y-%m-%d
+    en_date = sys.argv[2] #%Y-%m-%d
+    http_root = "https://madis-data.ncep.noaa.gov/madisPublic1/data/archive/"
 
-ftplink = "madis-data.ncep.noaa.gov"
-ftp_user = "anonymous"
-ftp_pass = "anonymous"
+    st_dt = pd.to_datetime(st_date)
+    en_dt = pd.to_datetime(en_date)
+    date_list = pd.date_range(st_dt,en_dt)
 
-dt = datetime.strptime(sys.argv[1], '%Y-%m-%d')
-
-date_str = dt.strftime('%Y-%m-%d')
-year_str = date_str.split('-')[0]
-mon_str = date_str.split('-')[1]
-day_str = date_str.split('-')[2]
-#Parse timezones. Have to change directories btw
-#for day given by date_str, get the 24 hour marks and then add 10 hours to each
-day_st = pd.to_datetime(date_str)
-day_en = day_st + timedelta(hours=24)
-day_st_utc = day_st + timedelta(hours=10)
-day_en_utc = day_en + timedelta(hours=10)
-
-utc_times = pd.date_range(day_st_utc,day_en_utc,freq='1h')
-all_utc_files = [dt.strftime('%Y%m%d_%H%M')+'.gz' for dt in utc_times]
-unique_dates = pd.Series(utc_times).map(lambda t: t.date()).unique()
-unique_days = ["{:02d}".format(dt.day) for dt in unique_dates]
-output_csv = OUTPUT_DIR + '_'.join((day_st.strftime('%Y%m%d'),'madis','parsed')) + '.csv'
-#Open the ftp connection but don't change directories until days are set
-with ftplib.FTP(ftplink, ftp_user, ftp_pass, timeout = 60) as ftp:
-    for (src,udate) in product(SRC_LIST,unique_dates):
-        unique_year = udate.strftime('%Y')
-        unique_mon = udate.strftime('%m')
-        unique_day = udate.strftime('%d')
-        ftp_parent_dir = '/'.join(('/archive',unique_year,unique_mon,unique_day,'LDAD'))
-        ftp.cwd(ftp_parent_dir)
-        ftp_srcs = ftp.nlst()
-        if src in ftp_srcs:
-            ftp_dir = '/'.join((ftp_parent_dir,src,'netCDF/'))
-            print(ftp_dir)
-            ftp.cwd(ftp_dir)
-            ftp_files = ftp.nlst()
-            avail_files = [fname for fname in all_utc_files if fname in ftp_files]
-            for fname in avail_files:
-                local_name = src + fname
-                new_local_name = local_name.split('.')[0]
-                print('Downloading',fname,'as',local_name)
-                with open(local_name,'wb') as f:
-                    ftp.retrbinary('RETR %s' % fname,f.write)
-                command = "gunzip " + local_name
-                res = subprocess.call(command,shell=True)
-                ds = xr.open_dataset(new_local_name)
+    for (dt,src) in product(date_list,SRC_LIST):
+        date_str = dt.strftime('%Y-%m-%d')
+        print(f"Fetching {src} files for {date_str}.")
+        year_str = date_str.split('-')[0]
+        mon_str = date_str.split('-')[1]
+        day_str = date_str.split('-')[2]
+        #Parse timezones. Have to change directories btw
+        #for day given by date_str, get the 24 hour marks and then add 10 hours to each
+        day_st = pd.to_datetime(date_str)
+        day_en = day_st + timedelta(hours=24)
+        day_st_utc = day_st + timedelta(hours=10)
+        day_en_utc = day_en + timedelta(hours=10)
+        
+        utc_times = pd.date_range(day_st_utc,day_en_utc,freq='h')
+        output_csv = OUTPUT_DIR + '_'.join((day_st.strftime('%Y%m%d'),'madis','parsed')) + '.csv'
+        print(f"Saving request data to {output_csv}")
+        
+        for utc in utc_times:
+            year = utc.strftime("%Y")
+            mon = utc.strftime("%m")
+            day = utc.strftime("%d")
+            file_name = utc.strftime('%Y%m%d_%H%M')+'.gz'
+            url = os.path.join(http_root,f"{year}/{mon}/{day}/LDAD/{src}/netCDF",file_name)
+            #set requests call
+            print(f"Trying {src} {file_name}.")
+            #After initial test wrap this in handle_retry
+            try:
+                response = handle_retry(fetch_url,(url,),max_retries=5)
+            except Exception as e:
+                print(f"Failed to fetch {file_name} after retries: {e}")
+                continue
+            if response is None:
+                #404 response returned
+                print("404, no file exists.")
+                continue 
+            with gzip.open(io.BytesIO(response.content)) as gz:
+                ds = xr.open_dataset(gz)
                 df = process_madis_data(ds,src)
                 update_csv(output_csv,df)
-                os.remove(new_local_name)
+            print(f"CSV updated.")
+            
 
 

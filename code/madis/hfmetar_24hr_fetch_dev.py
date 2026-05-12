@@ -1,15 +1,24 @@
+"""
+Fetch live MADIS data from LDAD/hfmetar
+Patch 05.2026
+- Converting ftp process to http via requests
+- Sets env
+"""
+
 import os
 import sys
 import warnings
-import subprocess
-import ftplib
 import pytz
+import requests
+import gzip
+import io
 import pandas as pd
 import xarray as xr
 import numpy as np
 from os.path import exists
 from datetime import datetime, timedelta
 from xarray import SerializationWarning
+from util import handle_retry
 
 warnings.filterwarnings('ignore',category=SerializationWarning)
 #DEFINE CONSTANTS-------------------------------------------------------------
@@ -26,6 +35,7 @@ MIN_LAT = 18
 MAX_LAT = 22.5
 K_CONST = 273.15
 PARSED_DIR = r'/home/hawaii_climate_products_container/preliminary/data_aqs/data_outputs/madis/parse/'
+#PARSED_DIR = './' #Testing
 #END CONSTANTS----------------------------------------------------------------
 
 #DEFINE FUNCTIONS-------------------------------------------------------------
@@ -83,7 +93,7 @@ def process_metar_data(ds,source):
     convert_K2C(converted_dict,ds,K_CONVERSION_KEYS,hii)
     convert_str(converted_dict,ds,STR_CONVERSION_KEYS,hii)
     convert_time(converted_dict,ds,hii)
-    df = pd.DataFrame()
+    df_list = []
     for vk in list(DATA_VAR_DICT.keys()):
         meta_group = [[converted_dict[key][index] for key in META_VAR_KEYS] for index in range(len(hii))]
         varname = ((vk+' ')*len(hii)).split()
@@ -92,7 +102,9 @@ def process_metar_data(ds,source):
         var_group = [[varname[index],converted_dict[vk][index],units[index],src_col[index]] for index in range(len(hii))]
         full_group = [meta_group[index]+var_group[index] for index in range(len(hii))]
         var_df = pd.DataFrame(full_group,columns=DF_COLS)
-        df = pd.concat([df,var_df])
+        df_list.append(var_df)
+
+    df = pd.concat(df_list,axis=0)
     
     #Clear all no-data values
     df = df[~df['value'].isna()]
@@ -105,56 +117,60 @@ def update_csv(csvname,new_df):
         upd_df.to_csv(csvname,index=False)
     else:
         new_df.to_csv(csvname,index=False)
+
+def fetch_url(url):
+    response = requests.get(url, stream=True)
+    if response.status_code == 404:
+        return None          # file absent — caller skips, no retry
+    response.raise_for_status()  # raises on 5xx, triggering handle_retry
+    return response
 #END FUNCTIONS----------------------------------------------------------------
 
-#FTP info
-src_prefix = 'hfmetar'
-ftplink = "madis-data.ncep.noaa.gov"
-ftp_dir = "/LDAD/hfmetar/netCDF/"
-ftp_user = 'anonymous'
-ftp_pass = 'anonymous'
+if __name__=="__main__":
+    #FTP info
+    src_prefix = 'hfmetar'
+    http_root = f"https://madis-data.ncep.noaa.gov/madisPublic1/data/LDAD/{src_prefix}/netCDF/"
 
-#Get filenames in correct time zone
-hst = pytz.timezone('HST')
-prev_day = None
-if len(sys.argv) > 1:
-    date_str = sys.argv[1]
-    prev_day = datetime.strptime(date_str, '%Y-%m-%d').astimezone(hst)
-else:
-    today = datetime.today().astimezone(hst)
-    prev_day = today - timedelta(days=1)
+    #Get filenames in correct time zone
+    hst = pytz.timezone('HST')
+    prev_day = None
+    if len(sys.argv) > 1:
+        date_str = sys.argv[1]
+        prev_day = datetime.strptime(date_str, '%Y-%m-%d').astimezone(hst)
+    else:
+        today = datetime.today().astimezone(hst)
+        prev_day = today - timedelta(days=1)
 
-time_st = pd.to_datetime(datetime(prev_day.year,prev_day.month,prev_day.day,0))
-time_en = time_st + pd.Timedelta(hours=24)
-hst_times = pd.date_range(time_st,time_en,freq='1h',tz='HST')
-utc_times = hst_times.tz_convert(tz=None)
+    time_st = pd.to_datetime(datetime(prev_day.year,prev_day.month,prev_day.day,0))
+    time_en = time_st + pd.Timedelta(hours=24)
+    hst_times = pd.date_range(time_st,time_en,freq='h',tz='HST')
+    utc_times = hst_times.tz_convert(tz=None)
 
-prev_day_files = [dt.strftime('%Y%m%d_%H%M')+'.gz' for dt in utc_times]
+    prev_day_files = [dt.strftime('%Y%m%d_%H%M')+'.gz' for dt in utc_times]
 
-prev_day_str = prev_day.strftime('%Y-%m-%d')
-prev_day_year = prev_day_str.split('-')[0]
-prev_day_mon = prev_day_str.split('-')[1]
-prev_day_day = prev_day_str.split('-')[2]
-csv_name = PARSED_DIR + '_'.join((prev_day.strftime('%Y%m%d'),'madis','parsed')) + '.csv'
-#Open FTP connection
-with ftplib.FTP(ftplink, ftp_user, ftp_pass, timeout = 60) as ftp:
-    ftp.cwd(ftp_dir)
-    ftp_files = ftp.nlst()
-    avail_files = [fname for fname in prev_day_files if fname in ftp_files]
-    unavail_files = [fname for fname in prev_day_files if fname not in ftp_files]
-    print("Unavailable files:",unavail_files)
-    for fname in avail_files:
-        local_name = '_'.join((src_prefix,fname))
-        print('Downloading',fname,'as',local_name)
-        with open(local_name,'wb') as f:
-            ftp.retrbinary('RETR %s' % fname,f.write)
-        #Gunzip file
-        command = "gunzip " + local_name
-        res = subprocess.call(command,shell=True)
-        #Open the netcdf and get requisite variables
-        new_local_name = local_name.split('.')[0] #assumes the filename convention follows prefix_YYYYMMDD_HHMM.gz
-        ds = xr.open_dataset(new_local_name)
-        #Don't do timezone reconversion yet, just make sure it can get into the csv properly
-        df = process_metar_data(ds,src_prefix)
-        update_csv(csv_name,df)
-        os.remove(new_local_name)
+    prev_day_str = prev_day.strftime('%Y-%m-%d')
+    prev_day_year = prev_day_str.split('-')[0]
+    prev_day_mon = prev_day_str.split('-')[1]
+    prev_day_day = prev_day_str.split('-')[2]
+    csv_name = PARSED_DIR + '_'.join((prev_day.strftime('%Y%m%d'),'madis','parsed')) + '.csv'
+
+    print(f"Saving request data to {csv_name}")
+
+    for fname in prev_day_files:
+        url = os.path.join(http_root,fname)
+        print(f"Trying {src_prefix} {fname}.")
+        try:
+            response = handle_retry(fetch_url,(url,)) #Keep retry count at default 10
+        except Exception as e:
+            print(f"Failed to fetch {fname} after retries: {e}")
+            continue
+        if response is None:
+            #404 response returned
+            print("404, no file exists.")
+            continue 
+        with gzip.open(io.BytesIO(response.content)) as gz:
+            ds = xr.open_dataset(gz)
+            df = process_metar_data(ds,src_prefix)
+            update_csv(csv_name,df)
+        print("CSV updated")
+
