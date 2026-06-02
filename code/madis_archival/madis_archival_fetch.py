@@ -1,5 +1,7 @@
 """
 Fetch MADIS archival data
+Patch 06.2026
+Updated to take only one date as input at a time. Cheesed slightly to allow easy switch back into local batch mode...
 Patch 05.2026
 Converting ftp process to http via requests
 """
@@ -153,7 +155,7 @@ def fetch_url(url):
 #END FUNCTIONS----------------------------------------------------------------
 if __name__== "__main__":
     st_date = sys.argv[1] #%Y-%m-%d
-    en_date = sys.argv[2] #%Y-%m-%d
+    en_date = sys.argv[1] #%Y-%m-%d
     http_root = "https://madis-data.ncep.noaa.gov/madisPublic1/data/archive/"
 
     st_dt = pd.to_datetime(st_date)
